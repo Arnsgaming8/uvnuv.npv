@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FreeVPN - Secure Your Connection",
+  title: "VreePN - Secure Your Connection",
   description: "A free, fast, and secure VPN service to protect your privacy online",
 };
 
