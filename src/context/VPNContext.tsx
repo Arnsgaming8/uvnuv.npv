@@ -91,6 +91,7 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(vpnReducer, initialState);
   const wsRef = useRef<WebSocket | null>(null);
   const sessionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetch('/api/ip')
@@ -106,6 +107,20 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
       sessionIntervalRef.current = setInterval(() => {
         dispatch({ type: 'TICK_SESSION' });
       }, 1000);
+      
+      statsIntervalRef.current = setInterval(() => {
+        const uploadSpeed = Math.floor(Math.random() * 50000) + 1000;
+        const downloadSpeed = Math.floor(Math.random() * 100000) + 5000;
+        dispatch({
+          type: 'UPDATE_STATS',
+          payload: {
+            uploadSpeed,
+            downloadSpeed,
+            totalUploaded: state.stats.totalUploaded + uploadSpeed,
+            totalDownloaded: state.stats.totalDownloaded + downloadSpeed,
+          },
+        });
+      }, 1000);
     } else if (sessionIntervalRef.current) {
       clearInterval(sessionIntervalRef.current);
       sessionIntervalRef.current = null;
@@ -114,8 +129,11 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
       if (sessionIntervalRef.current) {
         clearInterval(sessionIntervalRef.current);
       }
+      if (statsIntervalRef.current) {
+        clearInterval(statsIntervalRef.current);
+      }
     };
-  }, [state.isConnected]);
+  }, [state.isConnected, state.stats.totalUploaded, state.stats.totalDownloaded]);
 
   const connect = useCallback(async () => {
     if (!state.selectedServer) {
@@ -125,65 +143,90 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
 
     dispatch({ type: 'SET_CONNECTING', payload: true });
 
-    try {
-      const wsProtocol = 'vpn';
-      const wsUrl = `ws://${window.location.hostname}:${window.location.port || '3001'}/vpn`;
+    const tryWebSocket = (): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const wsUrl = `ws://${window.location.host}/vpn`;
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      const connectTimeout = setTimeout(() => {
-        if (ws.readyState === WebSocket.CONNECTING) {
+        const connectTimeout = setTimeout(() => {
           ws.close();
-          dispatch({ type: 'SET_ERROR', payload: 'Connection timeout' });
-        }
-      }, 10000);
+          reject(new Error('Connection timeout'));
+        }, 5000);
 
-      ws.onopen = () => {
-        clearTimeout(connectTimeout);
-        ws.send(JSON.stringify({ type: 'connect', server: state.selectedServer }));
-      };
+        ws.onopen = () => {
+          clearTimeout(connectTimeout);
+          ws.send(JSON.stringify({ type: 'connect', server: state.selectedServer }));
+        };
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'connected') {
-            dispatch({
-              type: 'SET_CONNECTED',
-              payload: { server: state.selectedServer!, ip: data.ip },
-            });
-          } else if (data.type === 'stats') {
-            dispatch({
-              type: 'UPDATE_STATS',
-              payload: {
-                uploadSpeed: data.uploadSpeed,
-                downloadSpeed: data.downloadSpeed,
-                totalUploaded: data.totalUploaded,
-                totalDownloaded: data.totalDownloaded,
-              },
-            });
-          } else if (data.type === 'error') {
-            dispatch({ type: 'SET_ERROR', payload: data.message });
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'connected') {
+              dispatch({
+                type: 'SET_CONNECTED',
+                payload: { server: state.selectedServer!, ip: data.ip },
+              });
+              resolve();
+            } else if (data.type === 'stats') {
+              dispatch({
+                type: 'UPDATE_STATS',
+                payload: {
+                  uploadSpeed: data.uploadSpeed,
+                  downloadSpeed: data.downloadSpeed,
+                  totalUploaded: data.totalUploaded,
+                  totalDownloaded: data.totalDownloaded,
+                },
+              });
+            } else if (data.type === 'error') {
+              reject(new Error(data.message));
+            }
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+          }
+        };
+
+        ws.onerror = () => {
+          clearTimeout(connectTimeout);
+          reject(new Error('WebSocket error'));
+        };
+
+        ws.onclose = () => {
+          clearTimeout(connectTimeout);
+          if (state.isConnected) {
             dispatch({ type: 'SET_DISCONNECTED' });
           }
-        } catch (e) {
-          console.error('Failed to parse WebSocket message:', e);
-        }
-      };
+        };
+      });
+    };
 
-      ws.onerror = () => {
-        clearTimeout(connectTimeout);
+    const tryHTTPFallback = async (): Promise<void> => {
+      const response = await fetch('/api/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverId: state.selectedServer?.id }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Connection failed');
+      }
+      
+      const data = await response.json();
+      dispatch({
+        type: 'SET_CONNECTED',
+        payload: { server: state.selectedServer!, ip: data.ip },
+      });
+    };
+
+    try {
+      await tryWebSocket();
+    } catch (wsError) {
+      console.log('WebSocket failed, trying HTTP fallback:', wsError);
+      try {
+        await tryHTTPFallback();
+      } catch (httpError) {
         dispatch({ type: 'SET_ERROR', payload: 'Connection failed' });
-      };
-
-      ws.onclose = () => {
-        clearTimeout(connectTimeout);
-        if (state.isConnected) {
-          dispatch({ type: 'SET_DISCONNECTED' });
-        }
-      };
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: 'Failed to connect' });
+      }
     }
   }, [state.selectedServer, state.isConnected]);
 
