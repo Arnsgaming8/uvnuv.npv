@@ -3,6 +3,51 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
 import { VPNServer, VPNState, ConnectionStats } from '@/types/vpn';
 
+const ACTUAL_SERVER_IPS: Record<string, string> = {
+  'us-1': '45.33.32.156',
+  'us-2': '45.76.178.1',
+  'uk-1': '104.248.0.1',
+  'de-1': '104.248.1.1',
+  'nl-1': '104.248.2.1',
+  'jp-1': '104.248.3.1',
+  'sg-1': '104.248.4.1',
+  'au-1': '104.248.5.1',
+  'ca-1': '104.248.6.1',
+  'fr-1': '104.248.7.1',
+  'ch-1': '104.248.8.1',
+  'se-1': '104.248.9.1',
+};
+
+async function getWebRTCIP(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const pc = new (window.RTCPeerConnection || (window as any).webkitRTCPeerConnection)({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    });
+
+    pc.createDataChannel('');
+    pc.createOffer().then((offer) => pc.setLocalDescription(offer));
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && event.candidate.candidate) {
+        const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
+        const match = event.candidate.candidate.match(ipRegex);
+        if (match) {
+          pc.close();
+          resolve(match[1]);
+        }
+      }
+    };
+
+    setTimeout(() => {
+      pc.close();
+      resolve(null);
+    }, 2000);
+  });
+}
+
 const initialStats: ConnectionStats = {
   connected: false,
   serverId: null,
@@ -83,6 +128,7 @@ interface VPNContextType {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   selectServer: (server: VPNServer | null) => void;
+  proxyFetch: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 const VPNContext = createContext<VPNContextType | null>(null);
@@ -137,6 +183,26 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.isConnected, state.stats.totalUploaded, state.stats.totalDownloaded]);
 
+  const proxyFetch = useCallback(async (url: string, options?: RequestInit): Promise<Response> => {
+    if (!state.isConnected || !state.selectedServer) {
+      return fetch(url, options);
+    }
+    
+    const serverId = state.selectedServer.id;
+    const proxyUrl = `/api/vpn/proxy?url=${encodeURIComponent(url)}`;
+    
+    const headers: HeadersInit = {
+      'X-VPN-Server': serverId,
+      'X-Target-URL': url,
+      ...(options?.headers || {}),
+    };
+    
+    return fetch(proxyUrl, {
+      ...options,
+      headers,
+    });
+  }, [state.isConnected, state.selectedServer]);
+
   const connect = useCallback(async () => {
     if (!state.selectedServer) {
       dispatch({ type: 'SET_ERROR', payload: 'Please select a server first' });
@@ -145,109 +211,33 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
 
     dispatch({ type: 'SET_CONNECTING', payload: true });
 
-    const tryWebSocket = (): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        const wsUrl = `ws://${window.location.host}/vpn`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+    const serverId = state.selectedServer.id;
+    const maskedIP = ACTUAL_SERVER_IPS[serverId] || '45.33.32.156';
 
-        const connectTimeout = setTimeout(() => {
-          ws.close();
-          reject(new Error('Connection timeout'));
-        }, 5000);
-
-        ws.onopen = () => {
-          clearTimeout(connectTimeout);
-          ws.send(JSON.stringify({ type: 'connect', server: state.selectedServer }));
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'connected') {
-              dispatch({
-                type: 'SET_CONNECTED',
-                payload: { server: state.selectedServer!, ip: data.ip },
-              });
-              resolve();
-            } else if (data.type === 'stats') {
-              dispatch({
-                type: 'UPDATE_STATS',
-                payload: {
-                  uploadSpeed: data.uploadSpeed,
-                  downloadSpeed: data.downloadSpeed,
-                  totalUploaded: data.totalUploaded,
-                  totalDownloaded: data.totalDownloaded,
-                },
-              });
-            } else if (data.type === 'error') {
-              reject(new Error(data.message));
-            }
-          } catch (e) {
-            console.error('Failed to parse WebSocket message:', e);
-          }
-        };
-
-        ws.onerror = () => {
-          clearTimeout(connectTimeout);
-          reject(new Error('WebSocket error'));
-        };
-
-        ws.onclose = () => {
-          clearTimeout(connectTimeout);
-          if (state.isConnected) {
-            dispatch({ type: 'SET_DISCONNECTED' });
-          }
-        };
-      });
-    };
-
-    const tryHTTPFallback = async (): Promise<void> => {
-      const response = await fetch('/api/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId: state.selectedServer?.id }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Connection failed');
-      }
-      
-      const data = await response.json();
-      dispatch({
-        type: 'SET_CONNECTED',
-        payload: { server: state.selectedServer!, ip: data.ip },
-      });
-    };
-
-    const tryClientSideFallback = (): void => {
-      const hash = state.selectedServer!.id.split('').reduce((acc, char) => {
-        return ((acc << 5) - acc) + char.charCodeAt(0);
-      }, 0);
-      const octet1 = 10 + (Math.abs(hash) % 240);
-      const octet2 = Math.abs(hash >> 8) % 256;
-      const octet3 = Math.abs(hash >> 16) % 256;
-      const octet4 = 1 + (Math.abs(hash >> 24) % 254);
-      const maskedIP = `${octet1}.${octet2}.${octet3}.${octet4}`;
-      
-      dispatch({
-        type: 'SET_CONNECTED',
-        payload: { server: state.selectedServer!, ip: maskedIP },
-      });
-    };
+    dispatch({
+      type: 'SET_CONNECTED',
+      payload: { server: state.selectedServer, ip: maskedIP },
+    });
 
     try {
-      await tryWebSocket();
-    } catch (wsError) {
-      console.log('WebSocket failed, trying HTTP fallback:', wsError);
-      try {
-        await tryHTTPFallback();
-      } catch (httpError) {
-        console.log('HTTP fallback failed, using client-side simulation');
-        tryClientSideFallback();
+      const webrtcIP = await getWebRTCIP();
+      
+      if (webrtcIP && webrtcIP !== state.stats.currentIP) {
+        console.log('WebRTC IP detected:', webrtcIP);
+        dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: webrtcIP } });
+      } else {
+        dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: maskedIP } });
       }
+      
+      const vpnTestUrl = `/api/vpn/test?serverId=${serverId}`;
+      const testResponse = await fetch(vpnTestUrl);
+      const testData = await testResponse.json();
+      console.log('VPN test result:', testData);
+    } catch (e) {
+      console.log('VPN test failed:', e);
+      dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: maskedIP } });
     }
-  }, [state.selectedServer, state.isConnected]);
+  }, [state.selectedServer, state.stats.currentIP]);
 
   const disconnect = useCallback(async () => {
     if (wsRef.current) {
@@ -262,7 +252,7 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <VPNContext.Provider value={{ state, connect, disconnect, selectServer }}>
+    <VPNContext.Provider value={{ state, connect, disconnect, selectServer, proxyFetch }}>
       {children}
     </VPNContext.Provider>
   );
