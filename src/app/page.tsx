@@ -399,10 +399,18 @@ function MainContent() {
           <h1 className="text-4xl md:text-6xl font-bold mb-4">
             Secure Your <span className="text-[var(--primary)]">Connection</span>
           </h1>
-          <p className="text-xl text-[var(--text-secondary)] max-w-2xl mx-auto">
+          <p className="text-xl text-[var(--text-secondary)] max-w-2xl mx-auto mb-6">
             Protect your privacy with our free, fast, and secure VPN service. 
             No registration required.
           </p>
+          <div className="flex items-center justify-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <span>Powered by</span>
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" fill="#F80000"/>
+              <path d="M12 6C9.24 6 7 8.24 7 11c0 2.76 2.24 5 5 5 1.1 0 2.1-.36 2.9-.97l.6.37C14.7 16.18 13.42 16.5 12 16.5c-3.87 0-7-3.13-7-7s3.13-7 7-7c.75 0 1.47.12 2.14.34l-.54.83C10.77 6.85 9.77 6.5 8.7 6.5 6.02 6.5 3.9 8.62 3.9 11.3s2.12 4.8 4.8 4.8c1.1 0 2.1-.36 2.9-.97l.6.37C11.5 16.63 10.22 17 9 17c-2.76 0-5-2.24-5-5s2.24-5 5-5h3" fill="white"/>
+            </svg>
+            <span className="font-semibold" style={{ color: '#F80000' }}>Oracle Cloud</span>
+          </div>
         </div>
 
         {error && (
