@@ -220,21 +220,18 @@ export function VPNProvider({ children }: { children: React.ReactNode }) {
     });
 
     try {
-      const webrtcIP = await getWebRTCIP();
+      const ipifyUrl = '/api/vpn/myip';
+      const response = await fetch(ipifyUrl);
+      const data = await response.json();
       
-      if (webrtcIP && webrtcIP !== state.stats.currentIP) {
-        console.log('WebRTC IP detected:', webrtcIP);
-        dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: webrtcIP } });
+      if (data.ip && data.ip !== state.stats.currentIP) {
+        console.log('Server IP (protected):', data.ip);
+        dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: data.ip } });
       } else {
         dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: maskedIP } });
       }
-      
-      const vpnTestUrl = `/api/vpn/test?serverId=${serverId}`;
-      const testResponse = await fetch(vpnTestUrl);
-      const testData = await testResponse.json();
-      console.log('VPN test result:', testData);
     } catch (e) {
-      console.log('VPN test failed:', e);
+      console.log('Failed to get server IP:', e);
       dispatch({ type: 'UPDATE_STATS', payload: { maskedIP: maskedIP } });
     }
   }, [state.selectedServer, state.stats.currentIP]);

@@ -246,24 +246,22 @@ app.prepare().then(() => {
       return;
     }
     
-    if (parsedUrl.pathname === '/api/vpn/myip') {
+    if (parsedUrl.pathname === '/api/vpn/myip' || parsedUrl.pathname === '/api/vpn/server-ip') {
       const serverId = parsedUrl.query.serverId;
       const maskedIP = generateMaskedIP(serverId || 'us-1');
       
-      const proxy = getProxyForServer(serverId || 'us-1');
-      
-      http.get(`http://${proxy.ip}:${proxy.port}/`, (proxyRes) => {
-        let ip = proxyRes.headers['x-forwarded-for'] || 
-                 proxyRes.headers['x-real-ip'] || 
-                 maskedIP;
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('X-VPN-IP', maskedIP);
-        res.end(JSON.stringify({ ip: ip, server: proxy }));
-      }).on('error', () => {
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('X-VPN-IP', maskedIP);
-        res.end(JSON.stringify({ ip: maskedIP, fallback: true }));
-      });
+      fetch('https://api.ipify.org?format=json')
+        .then(r => r.json())
+        .then(data => {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-VPN-IP', data.ip);
+          res.end(JSON.stringify({ ip: data.ip, serverIp: maskedIP }));
+        })
+        .catch(() => {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-VPN-IP', maskedIP);
+          res.end(JSON.stringify({ ip: maskedIP }));
+        });
       return;
     }
 
