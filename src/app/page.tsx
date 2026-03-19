@@ -296,27 +296,46 @@ function Features() {
 
 function Header() {
   const { theme, toggleTheme } = useTheme();
+  const { state } = useVPN();
+  const { isConnected } = state;
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+
+  useEffect(() => {
+    fetch('/api/vpn/myip', { method: 'HEAD' })
+      .then(() => setBackendStatus('online'))
+      .catch(() => setBackendStatus('offline'));
+    
+    const interval = setInterval(() => {
+      fetch('/api/vpn/myip', { method: 'HEAD', cache: 'no-cache' })
+        .then(() => setBackendStatus('online'))
+        .catch(() => setBackendStatus('offline'));
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const statusColor = isConnected ? 'var(--primary)' : backendStatus === 'online' ? 'var(--warning)' : '#ff4444';
+  const statusText = isConnected ? 'Protected' : backendStatus === 'online' ? 'Online' : 'Offline';
   
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--bg-dark)]/80 backdrop-blur-lg border-b border-[var(--border)]">
-      <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <header 
+      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-lg border-b border-[var(--border)]"
+      style={{ backgroundColor: 'var(--bg-dark)', opacity: 0.95 }}
+    >
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-full bg-[var(--primary)] flex items-center justify-center">
-            <svg className="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24">
+          <div className="w-8 h-8 rounded-full bg-[var(--primary)] flex items-center justify-center">
+            <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
             </svg>
           </div>
-          <span className="text-xl font-bold">VreePN</span>
+          <span className="text-lg font-bold">VreePN</span>
         </div>
-        <nav className="hidden md:flex items-center gap-8">
-          <a href="#servers" className="hover:text-[var(--primary)] transition-colors">Servers</a>
-          <a href="#features" className="hover:text-[var(--primary)] transition-colors">Features</a>
-          <a href="#download" className="hover:text-[var(--primary)] transition-colors">Download</a>
-        </nav>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--primary)] transition-colors"
+            className="p-2 rounded-lg border transition-colors hover:border-[var(--primary)]"
+            style={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             aria-label="Toggle theme"
           >
             {theme === 'dark' ? (
@@ -325,13 +344,16 @@ function Header() {
               </svg>
             ) : (
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
+                <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1z"/>
               </svg>
             )}
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-[var(--primary)] animate-pulse" />
-            <span className="text-sm text-[var(--text-secondary)]">Online</span>
+            <div 
+              className="w-2 h-2 rounded-full animate-pulse" 
+              style={{ backgroundColor: statusColor }}
+            />
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{statusText}</span>
           </div>
         </div>
       </div>
@@ -407,7 +429,7 @@ function MainContent() {
   );
 }
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function VPNPage() {
   return (
