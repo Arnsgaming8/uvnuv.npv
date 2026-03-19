@@ -365,14 +365,6 @@ function Footer() {
   return (
     <footer className="border-t border-[var(--border)] py-8 px-4 mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col items-center gap-6">
-        <div className="text-center">
-          <p className="text-sm" style={{ color: 'var(--text-secondary)', maxWidth: '600px', lineHeight: '1.6' }}>
-            This software is provided for authorized use only. Users are strictly prohibited from utilizing 
-            this service for any unlawful activities, including but not limited to unauthorized access to 
-            computer systems, data breaches, or any activity that violates applicable laws and regulations. 
-            By using this service, you agree to comply with all applicable terms and conditions.
-          </p>
-        </div>
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-[var(--primary)] flex items-center justify-center">
             <svg className="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 24 24">
