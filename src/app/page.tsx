@@ -129,10 +129,6 @@ function ServerCard({ server, isSelected, onSelect, latency }: {
           <div className="text-sm font-mono" style={{ color: latency < 100 ? '#00ff88' : latency < 150 ? '#ffaa00' : '#ff4444' }}>
             {latency}ms
           </div>
-          <div className="flex items-center gap-1 justify-end mt-1">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getLoadColor(server.load) }} />
-            <span className="text-xs text-[var(--text-secondary)]">{server.load}</span>
-          </div>
         </div>
       </div>
     </button>
