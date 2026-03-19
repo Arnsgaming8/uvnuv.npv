@@ -383,11 +383,6 @@ function Footer() {
         <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
           Programmed by Arnav Jugessur | Designed by Kilo AI
         </div>
-        <div className="flex gap-6">
-          <a href="#" className="text-sm hover:text-[var(--primary)] transition-colors" style={{ color: 'var(--text-secondary)' }}>Privacy Policy</a>
-          <a href="#" className="text-sm hover:text-[var(--primary)] transition-colors" style={{ color: 'var(--text-secondary)' }}>Terms of Service</a>
-          <a href="#" className="text-sm hover:text-[var(--primary)] transition-colors" style={{ color: 'var(--text-secondary)' }}>Contact</a>
-        </div>
       </div>
     </footer>
   );
